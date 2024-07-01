@@ -155,8 +155,8 @@ export class AssetRepository implements IAssetRepository {
     });
   }
 
-  getByDeviceIds(ownerId: string, deviceId: string, deviceAssetIds: string[]): Promise<AssetEntity[]> {
-    return this.repository.find({
+  async getByDeviceIds(ownerId: string, deviceId: string, deviceAssetIds: string[]): Promise<string[]> {
+    const assets = await this.repository.find({
       select: { deviceAssetId: true },
       where: {
         deviceAssetId: In(deviceAssetIds),
@@ -165,6 +165,8 @@ export class AssetRepository implements IAssetRepository {
       },
       withDeleted: true,
     });
+
+    return assets.map((asset) => asset.deviceAssetId);
   }
 
   getByUserId(
@@ -186,7 +188,8 @@ export class AssetRepository implements IAssetRepository {
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.STRING] })
   getByLibraryIdAndOriginalPath(libraryId: string, originalPath: string): Promise<AssetEntity | null> {
     return this.repository.findOne({
-      where: { library: { id: libraryId }, originalPath: originalPath },
+      where: { library: { id: libraryId }, originalPath },
+      withDeleted: true,
     });
   }
 
@@ -247,6 +250,16 @@ export class AssetRepository implements IAssetRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
+  getLivePhotoCount(motionId: string): Promise<number> {
+    return this.repository.count({
+      where: {
+        livePhotoVideoId: motionId,
+      },
+      withDeleted: true,
+    });
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
   getById(
     id: string,
     relations: FindOptionsRelations<AssetEntity>,
@@ -300,10 +313,19 @@ export class AssetRepository implements IAssetRepository {
     await this.repository.remove(asset);
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, DummyValue.BUFFER] })
-  getByChecksum(libraryId: string | null, checksum: Buffer): Promise<AssetEntity | null> {
+  @GenerateSql({ params: [{ ownerId: DummyValue.UUID, libraryId: DummyValue.UUID, checksum: DummyValue.BUFFER }] })
+  getByChecksum({
+    ownerId,
+    libraryId,
+    checksum,
+  }: {
+    ownerId: string;
+    checksum: Buffer;
+    libraryId?: string;
+  }): Promise<AssetEntity | null> {
     return this.repository.findOne({
       where: {
+        ownerId,
         libraryId: libraryId || IsNull(),
         checksum,
       },
@@ -754,36 +776,40 @@ export class AssetRepository implements IAssetRepository {
     ],
   })
   getAllForUserFullSync(options: AssetFullSyncOptions): Promise<AssetEntity[]> {
-    const { ownerId, lastCreationDate, lastId, updatedUntil, limit } = options;
+    const { ownerId, lastId, updatedUntil, limit } = options;
     const builder = this.getBuilder({
       userIds: [ownerId],
-      exifInfo: true, // also joins stack information
+      exifInfo: false, // need to do this manually because `exifInfo: true` also loads stacked assets messing with `limit`
       withStacked: false, // return all assets individually as expected by the app
-    });
+    })
+      .leftJoinAndSelect('asset.exifInfo', 'exifInfo')
+      .leftJoinAndSelect('asset.stack', 'stack')
+      .loadRelationCountAndMap('stack.assetCount', 'stack.assets', 'stackedAssetsCount');
 
-    if (lastCreationDate !== undefined && lastId !== undefined) {
-      builder.andWhere('(asset.fileCreatedAt, asset.id) < (:lastCreationDate, :lastId)', {
-        lastCreationDate,
-        lastId,
-      });
+    if (lastId !== undefined) {
+      builder.andWhere('asset.id > :lastId', { lastId });
     }
-
-    return builder
+    builder
       .andWhere('asset.updatedAt <= :updatedUntil', { updatedUntil })
-      .orderBy('asset.fileCreatedAt', 'DESC')
-      .addOrderBy('asset.id', 'DESC')
-      .limit(limit)
-      .withDeleted()
-      .getMany();
+      .orderBy('asset.id', 'ASC')
+      .limit(limit) // cannot use `take` for performance reasons
+      .withDeleted();
+    return builder.getMany();
   }
 
   @GenerateSql({ params: [{ userIds: [DummyValue.UUID], updatedAfter: DummyValue.DATE }] })
   getChangedDeltaSync(options: AssetDeltaSyncOptions): Promise<AssetEntity[]> {
-    const builder = this.getBuilder({ userIds: options.userIds, exifInfo: true, withStacked: false })
+    const builder = this.getBuilder({
+      userIds: options.userIds,
+      exifInfo: false, // need to do this manually because `exifInfo: true` also loads stacked assets messing with `limit`
+      withStacked: false, // return all assets individually as expected by the app
+    })
+      .leftJoinAndSelect('asset.exifInfo', 'exifInfo')
+      .leftJoinAndSelect('asset.stack', 'stack')
+      .loadRelationCountAndMap('stack.assetCount', 'stack.assets', 'stackedAssetsCount')
       .andWhere({ updatedAt: MoreThan(options.updatedAfter) })
-      .limit(options.limit)
+      .limit(options.limit) // cannot use `take` for performance reasons
       .withDeleted();
-
     return builder.getMany();
   }
 }

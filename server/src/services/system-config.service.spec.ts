@@ -16,7 +16,6 @@ import { SystemMetadataKey } from 'src/entities/system-metadata.entity';
 import { IEventRepository, ServerEvent } from 'src/interfaces/event.interface';
 import { QueueName } from 'src/interfaces/job.interface';
 import { ILoggerRepository } from 'src/interfaces/logger.interface';
-import { ISearchRepository } from 'src/interfaces/search.interface';
 import { ISystemMetadataRepository } from 'src/interfaces/system-metadata.interface';
 import { SystemConfigService } from 'src/services/system-config.service';
 import { newEventRepositoryMock } from 'test/repositories/event.repository.mock';
@@ -42,7 +41,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
     [QueueName.SIDECAR]: { concurrency: 5 },
     [QueueName.LIBRARY]: { concurrency: 5 },
     [QueueName.MIGRATION]: { concurrency: 5 },
-    [QueueName.THUMBNAIL_GENERATION]: { concurrency: 5 },
+    [QueueName.THUMBNAIL_GENERATION]: { concurrency: 3 },
     [QueueName.VIDEO_CONVERSION]: { concurrency: 1 },
     [QueueName.NOTIFICATION]: { concurrency: 5 },
   },
@@ -82,7 +81,7 @@ const updatedConfig = Object.freeze<SystemConfig>({
     },
     duplicateDetection: {
       enabled: true,
-      maxDistance: 0.0155,
+      maxDistance: 0.01,
     },
     facialRecognition: {
       enabled: true,
@@ -180,14 +179,13 @@ describe(SystemConfigService.name, () => {
   let systemMock: Mocked<ISystemMetadataRepository>;
   let eventMock: Mocked<IEventRepository>;
   let loggerMock: Mocked<ILoggerRepository>;
-  let smartInfoMock: Mocked<ISearchRepository>;
 
   beforeEach(() => {
     delete process.env.IMMICH_CONFIG_FILE;
     systemMock = newSystemMetadataRepositoryMock();
     eventMock = newEventRepositoryMock();
     loggerMock = newLoggerRepositoryMock();
-    sut = new SystemConfigService(systemMock, eventMock, loggerMock, smartInfoMock);
+    sut = new SystemConfigService(systemMock, eventMock, loggerMock);
   });
 
   it('should work', () => {

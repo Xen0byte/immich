@@ -13,6 +13,7 @@
   import { NotificationType, notificationController } from '../notification/notification';
   import UserAvatar from '../user-avatar.svelte';
   import AvatarSelector from './avatar-selector.svelte';
+  import { t } from 'svelte-i18n';
 
   let isShowSelectAvatar = false;
 
@@ -28,14 +29,15 @@
       }
 
       $preferences = await updateMyPreferences({ userPreferencesUpdateDto: { avatar: { color } } });
+      $user = { ...$user, profileImagePath: '', avatarColor: $preferences.avatar.color };
       isShowSelectAvatar = false;
 
       notificationController.show({
-        message: 'Saved profile',
+        message: $t('saved_profile'),
         type: NotificationType.Info,
       });
     } catch (error) {
-      handleError(error, 'Unable to save profile');
+      handleError(error, $t('errors.unable_to_save_profile'));
     }
   };
 </script>
@@ -51,14 +53,12 @@
       class="mx-4 mt-4 flex flex-col items-center justify-center gap-4 rounded-3xl bg-white p-4 dark:bg-immich-dark-primary/10"
     >
       <div class="relative">
-        {#key $user}
-          <UserAvatar user={$user} size="xl" />
-        {/key}
+        <UserAvatar user={$user} size="xl" />
         <div class="absolute z-10 bottom-0 right-0 rounded-full w-6 h-6">
           <CircleIconButton
             color="primary"
             icon={mdiPencil}
-            title="Edit avatar"
+            title={$t('edit_avatar')}
             class="border"
             size="12"
             padding="2"
@@ -77,7 +77,7 @@
         <Button color="dark-gray" size="sm" shadow={false} border>
           <div class="flex place-content-center place-items-center gap-2 px-2">
             <Icon path={mdiCog} size="18" />
-            Account Settings
+            {$t('account_settings')}
           </div>
         </Button>
       </a>
@@ -90,11 +90,12 @@
         on:click={() => dispatch('logout')}
       >
         <Icon path={mdiLogout} size={24} />
-        Sign Out</button
+        {$t('sign_out')}</button
       >
     </div>
   </div>
 </FocusTrap>
+
 {#if isShowSelectAvatar}
   <AvatarSelector
     user={$user}

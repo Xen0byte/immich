@@ -10,6 +10,7 @@
   import { NotificationType, notificationController } from '../shared-components/notification/notification';
   import CircleIconButton from '$lib/components/elements/buttons/circle-icon-button.svelte';
   import { dialogController } from '$lib/components/shared-components/dialog/dialog';
+  import { t } from 'svelte-i18n';
 
   export let keys: ApiKeyResponseDto[];
 
@@ -32,7 +33,7 @@
       const data = await createApiKey({ apiKeyCreateDto: detail });
       secret = data.secret;
     } catch (error) {
-      handleError(error, 'Unable to create a new API Key');
+      handleError(error, $t('errors.unable_to_create_api_key'));
     } finally {
       await refreshKeys();
       newKey = null;
@@ -47,11 +48,11 @@
     try {
       await updateApiKey({ id: editKey.id, apiKeyUpdateDto: { name: detail.name } });
       notificationController.show({
-        message: `Saved API Key`,
+        message: $t('saved_api_key'),
         type: NotificationType.Info,
       });
     } catch (error) {
-      handleError(error, 'Unable to save API Key');
+      handleError(error, $t('errors.unable_to_save_api_key'));
     } finally {
       await refreshKeys();
       editKey = null;
@@ -61,7 +62,7 @@
   const handleDelete = async (key: ApiKeyResponseDto) => {
     const isConfirmed = await dialogController.show({
       id: 'delete-api-key',
-      prompt: 'Are you sure you want to delete this API key?',
+      prompt: $t('delete_api_key_prompt'),
     });
 
     if (!isConfirmed) {
@@ -71,11 +72,11 @@
     try {
       await deleteApiKey({ id: key.id });
       notificationController.show({
-        message: `Removed API Key: ${key.name}`,
+        message: $t('removed_api_key', { values: { name: key.name } }),
         type: NotificationType.Info,
       });
     } catch (error) {
-      handleError(error, 'Unable to remove API Key');
+      handleError(error, $t('errors.unable_to_remove_api_key'));
     } finally {
       await refreshKeys();
     }
@@ -84,8 +85,8 @@
 
 {#if newKey}
   <APIKeyForm
-    title="New API key"
-    submitText="Create"
+    title={$t('new_api_key')}
+    submitText={$t('create')}
     apiKey={newKey}
     on:submit={({ detail }) => handleCreate(detail)}
     on:cancel={() => (newKey = null)}
@@ -98,8 +99,8 @@
 
 {#if editKey}
   <APIKeyForm
-    title="API key"
-    submitText="Save"
+    title={$t('api_key')}
+    submitText={$t('save')}
     apiKey={editKey}
     on:submit={({ detail }) => handleUpdate(detail)}
     on:cancel={() => (editKey = null)}
@@ -109,7 +110,7 @@
 <section class="my-4">
   <div class="flex flex-col gap-2" in:fade={{ duration: 500 }}>
     <div class="mb-2 flex justify-end">
-      <Button size="sm" on:click={() => (newKey = { name: 'API Key' })}>New API Key</Button>
+      <Button size="sm" on:click={() => (newKey = { name: $t('api_key') })}>{$t('new_api_key')}</Button>
     </div>
 
     {#if keys.length > 0}
@@ -118,9 +119,9 @@
           class="mb-4 flex h-12 w-full rounded-md border bg-gray-50 text-immich-primary dark:border-immich-dark-gray dark:bg-immich-dark-gray dark:text-immich-dark-primary"
         >
           <tr class="flex w-full place-items-center">
-            <th class="w-1/3 text-center text-sm font-medium">Name</th>
-            <th class="w-1/3 text-center text-sm font-medium">Created</th>
-            <th class="w-1/3 text-center text-sm font-medium">Action</th>
+            <th class="w-1/3 text-center text-sm font-medium">{$t('name')}</th>
+            <th class="w-1/3 text-center text-sm font-medium">{$t('created')}</th>
+            <th class="w-1/3 text-center text-sm font-medium">{$t('action')}</th>
           </tr>
         </thead>
         <tbody class="block w-full overflow-y-auto rounded-md border dark:border-immich-dark-gray">
@@ -141,14 +142,14 @@
                   <CircleIconButton
                     color="primary"
                     icon={mdiPencilOutline}
-                    title="Edit key"
+                    title={$t('edit_key')}
                     size="16"
                     on:click={() => (editKey = key)}
                   />
                   <CircleIconButton
                     color="primary"
                     icon={mdiTrashCanOutline}
-                    title="Delete key"
+                    title={$t('delete_key')}
                     size="16"
                     on:click={() => handleDelete(key)}
                   />

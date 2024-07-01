@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { afterNavigate, goto } from '$app/navigation';
+  import { afterNavigate, goto, onNavigate } from '$app/navigation';
   import AlbumDescription from '$lib/components/album-page/album-description.svelte';
   import AlbumOptions from '$lib/components/album-page/album-options.svelte';
   import AlbumSummary from '$lib/components/album-page/album-summary.svelte';
@@ -22,9 +22,8 @@
   import RemoveFromAlbum from '$lib/components/photos-page/actions/remove-from-album.svelte';
   import SelectAllAssets from '$lib/components/photos-page/actions/select-all-assets.svelte';
   import AssetGrid from '$lib/components/photos-page/asset-grid.svelte';
-  import AssetSelectContextMenu from '$lib/components/photos-page/asset-select-context-menu.svelte';
+  import ButtonContextMenu from '$lib/components/shared-components/context-menu/button-context-menu.svelte';
   import AssetSelectControlBar from '$lib/components/photos-page/asset-select-control-bar.svelte';
-  import ContextMenu from '$lib/components/shared-components/context-menu/context-menu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/menu-option.svelte';
   import ControlAppBar from '$lib/components/shared-components/control-app-bar.svelte';
   import CreateSharedLinkModal from '$lib/components/shared-components/create-share-link-modal/create-shared-link-modal.svelte';
@@ -38,13 +37,10 @@
   import { createAssetInteractionStore } from '$lib/stores/asset-interaction.store';
   import { assetViewingStore } from '$lib/stores/asset-viewing.store';
   import { AssetStore } from '$lib/stores/assets.store';
-  import { locale } from '$lib/stores/preferences.store';
   import { SlideshowNavigation, SlideshowState, slideshowStore } from '$lib/stores/slideshow.store';
   import { user } from '$lib/stores/user.store';
-  import { handlePromiseError, s } from '$lib/utils';
+  import { handlePromiseError } from '$lib/utils';
   import { downloadAlbum } from '$lib/utils/asset-utils';
-  import { clickOutside } from '$lib/actions/click-outside';
-  import { getContextMenuPosition } from '$lib/utils/context-menu';
   import { openFileUploadDialog } from '$lib/utils/file-uploader';
   import { handleError } from '$lib/utils/handle-error';
   import { isAlbumsRoute, isPeopleRoute, isSearchRoute } from '$lib/utils/navigation';
@@ -81,6 +77,7 @@
   import { fly } from 'svelte/transition';
   import type { PageData } from './$types';
   import { dialogController } from '$lib/components/shared-components/dialog/dialog';
+  import { t } from 'svelte-i18n';
 
   export let data: PageData;
 
@@ -102,7 +99,6 @@
     SELECT_USERS = 'select-users',
     SELECT_THUMBNAIL = 'select-thumbnail',
     SELECT_ASSETS = 'select-assets',
-    ALBUM_OPTIONS = 'album-options',
     VIEW_USERS = 'view-users',
     VIEW = 'view',
     OPTIONS = 'options',
@@ -111,7 +107,6 @@
   let backUrl: string = AppRoute.ALBUMS;
   let viewMode = ViewMode.VIEW;
   let isCreatingSharedAlbum = false;
-  let contextMenuPosition: { x: number; y: number } = { x: 0, y: 0 };
   let isShowActivity = false;
   let isLiked: ActivityResponseDto | null = null;
   let reactions: ActivityResponseDto[] = [];
@@ -172,10 +167,10 @@
       });
       notificationController.show({
         type: NotificationType.Info,
-        message: `Activity is ${album.isActivityEnabled ? 'enabled' : 'disabled'}`,
+        message: $t('activity_changed', { values: { enabled: album.isActivityEnabled } }),
       });
     } catch (error) {
-      handleError(error, `Can't ${album.isActivityEnabled ? 'disable' : 'enable'} activity`);
+      handleError(error, $t('errors.cant_change_activity', { values: { enabled: album.isActivityEnabled } }));
     }
   };
 
@@ -193,7 +188,7 @@
         reactions = [...reactions, isLiked];
       }
     } catch (error) {
-      handleError(error, "Can't change favorite for asset");
+      handleError(error, $t('errors.cant_change_asset_favorite'));
     }
   };
 
@@ -210,7 +205,7 @@
           isLiked = data[0];
         }
       } catch (error) {
-        handleError(error, "Can't get Favorite");
+        handleError(error, $t('errors.unable_to_load_liked_status'));
       }
     }
   };
@@ -220,7 +215,7 @@
       const { comments } = await getActivityStatistics({ albumId: album.id });
       setNumberOfComments(comments);
     } catch (error) {
-      handleError(error, "Can't get number of comments");
+      handleError(error, $t('errors.cant_get_number_of_comments'));
     }
   };
 
@@ -287,7 +282,7 @@
       const count = results.filter(({ success }) => success).length;
       notificationController.show({
         type: NotificationType.Info,
-        message: `Added ${count} asset${s(count)}`,
+        message: $t('assets_added_count', { values: { count: count } }),
       });
 
       await refreshAlbum();
@@ -295,18 +290,13 @@
       timelineInteractionStore.clearMultiselect();
       viewMode = ViewMode.VIEW;
     } catch (error) {
-      handleError(error, 'Error adding assets to album');
+      handleError(error, $t('errors.error_adding_assets_to_album'));
     }
   };
 
   const handleCloseSelectAssets = () => {
     viewMode = ViewMode.VIEW;
     timelineInteractionStore.clearMultiselect();
-  };
-
-  const handleOpenAlbumOptions = (event: MouseEvent) => {
-    contextMenuPosition = getContextMenuPosition(event, 'top-left');
-    viewMode = viewMode === ViewMode.VIEW ? ViewMode.ALBUM_OPTIONS : ViewMode.VIEW;
   };
 
   const handleSelectFromComputer = async () => {
@@ -326,7 +316,7 @@
 
       viewMode = ViewMode.VIEW;
     } catch (error) {
-      handleError(error, 'Error adding users to album');
+      handleError(error, $t('errors.error_adding_users_to_album'));
     }
   };
 
@@ -340,7 +330,7 @@
       await refreshAlbum();
       viewMode = album.albumUsers.length > 0 ? ViewMode.VIEW_USERS : ViewMode.VIEW;
     } catch (error) {
-      handleError(error, 'Error deleting shared user');
+      handleError(error, $t('errors.error_deleting_shared_user'));
     }
   };
 
@@ -351,7 +341,7 @@
   const handleRemoveAlbum = async () => {
     const isConfirmed = await dialogController.show({
       id: 'remove-album',
-      prompt: `Are you sure you want to delete the album ${album.albumName}?\nIf this album is shared, other users will not be able to access it anymore.`,
+      prompt: $t('album_delete_confirmation', { values: { album: album.albumName } }),
     });
 
     if (!isConfirmed) {
@@ -363,7 +353,7 @@
       await deleteAlbum({ id: album.id });
       await goto(backUrl);
     } catch (error) {
-      handleError(error, 'Unable to delete album');
+      handleError(error, $t('errors.unable_to_delete_album'));
     } finally {
       viewMode = ViewMode.VIEW;
     }
@@ -402,9 +392,15 @@
         },
       });
     } catch (error) {
-      handleError(error, 'Unable to update album cover');
+      handleError(error, $t('errors.unable_to_update_album_cover'));
     }
   };
+
+  onNavigate(async () => {
+    if (album.assetCount === 0 && !album.albumName) {
+      await deleteAlbum(album);
+    }
+  });
 </script>
 
 <div class="flex overflow-hidden" bind:clientWidth={globalWidth}>
@@ -413,23 +409,23 @@
       <AssetSelectControlBar assets={$selectedAssets} clearSelect={() => assetInteractionStore.clearMultiselect()}>
         <CreateSharedLink />
         <SelectAllAssets {assetStore} {assetInteractionStore} />
-        <AssetSelectContextMenu icon={mdiPlus} title="Add to...">
+        <ButtonContextMenu icon={mdiPlus} title={$t('add_to')}>
           <AddToAlbum />
           <AddToAlbum shared />
-        </AssetSelectContextMenu>
+        </ButtonContextMenu>
         {#if isAllUserOwned}
           <FavoriteAction removeFavorite={isAllFavorite} onFavorite={() => assetStore.triggerUpdate()} />
         {/if}
-        <AssetSelectContextMenu icon={mdiDotsVertical} title="Menu">
+        <ButtonContextMenu icon={mdiDotsVertical} title={$t('menu')}>
           <DownloadAction menuItem filename="{album.albumName}.zip" />
           {#if isAllUserOwned}
             <ChangeDate menuItem />
             <ChangeLocation menuItem />
             {#if $selectedAssets.size === 1}
               <MenuOption
-                text="Set as album cover"
+                text={$t('set_as_album_cover')}
                 icon={mdiImageOutline}
-                on:click={() => updateThumbnailUsingCurrentSelection()}
+                onClick={() => updateThumbnailUsingCurrentSelection()}
               />
             {/if}
             <ArchiveAction menuItem unarchive={isAllArchived} onArchive={() => assetStore.triggerUpdate()} />
@@ -440,15 +436,15 @@
           {#if isAllUserOwned}
             <DeleteAssets menuItem onAssetDelete={handleRemoveAssets} />
           {/if}
-        </AssetSelectContextMenu>
+        </ButtonContextMenu>
       </AssetSelectControlBar>
     {:else}
-      {#if viewMode === ViewMode.VIEW || viewMode === ViewMode.ALBUM_OPTIONS}
+      {#if viewMode === ViewMode.VIEW}
         <ControlAppBar showBackButton backIcon={mdiArrowLeft} on:close={() => goto(backUrl)}>
           <svelte:fragment slot="trailing">
             {#if isEditor}
               <CircleIconButton
-                title="Add photos"
+                title={$t('add_photos')}
                 on:click={() => (viewMode = ViewMode.SELECT_ASSETS)}
                 icon={mdiImagePlusOutline}
               />
@@ -456,31 +452,26 @@
 
             {#if isOwned}
               <CircleIconButton
-                title="Share"
+                title={$t('share')}
                 on:click={() => (viewMode = ViewMode.SELECT_USERS)}
                 icon={mdiShareVariantOutline}
               />
             {/if}
 
             {#if album.assetCount > 0}
-              <CircleIconButton title="Slideshow" on:click={handleStartSlideshow} icon={mdiPresentationPlay} />
-              <CircleIconButton title="Download" on:click={handleDownloadAlbum} icon={mdiFolderDownloadOutline} />
+              <CircleIconButton title={$t('slideshow')} on:click={handleStartSlideshow} icon={mdiPresentationPlay} />
+              <CircleIconButton title={$t('download')} on:click={handleDownloadAlbum} icon={mdiFolderDownloadOutline} />
 
               {#if isOwned}
-                <div use:clickOutside on:outclick={() => (viewMode = ViewMode.VIEW)}>
-                  <CircleIconButton title="Album options" on:click={handleOpenAlbumOptions} icon={mdiDotsVertical} />
-                  {#if viewMode === ViewMode.ALBUM_OPTIONS}
-                    <ContextMenu {...contextMenuPosition}>
-                      <MenuOption
-                        icon={mdiImageOutline}
-                        text="Select album cover"
-                        on:click={() => (viewMode = ViewMode.SELECT_THUMBNAIL)}
-                      />
-                      <MenuOption icon={mdiCogOutline} text="Options" on:click={() => (viewMode = ViewMode.OPTIONS)} />
-                      <MenuOption icon={mdiDeleteOutline} text="Delete album" on:click={() => handleRemoveAlbum()} />
-                    </ContextMenu>
-                  {/if}
-                </div>
+                <ButtonContextMenu icon={mdiDotsVertical} title={$t('album_options')}>
+                  <MenuOption
+                    icon={mdiImageOutline}
+                    text={$t('select_album_cover')}
+                    onClick={() => (viewMode = ViewMode.SELECT_THUMBNAIL)}
+                  />
+                  <MenuOption icon={mdiCogOutline} text={$t('options')} onClick={() => (viewMode = ViewMode.OPTIONS)} />
+                  <MenuOption icon={mdiDeleteOutline} text={$t('delete_album')} onClick={() => handleRemoveAlbum()} />
+                </ButtonContextMenu>
               {/if}
             {/if}
 
@@ -491,7 +482,7 @@
                 disabled={album.assetCount === 0}
                 on:click={() => (viewMode = ViewMode.SELECT_USERS)}
               >
-                Share
+                {$t('share')}
               </Button>
             {/if}
           </svelte:fragment>
@@ -503,9 +494,9 @@
           <svelte:fragment slot="leading">
             <p class="text-lg dark:text-immich-dark-fg">
               {#if $timelineSelected.size === 0}
-                Add to album
+                {$t('add_to_album')}
               {:else}
-                {$timelineSelected.size.toLocaleString($locale)} selected
+                {$t('selected_count', { values: { count: $timelineSelected.size } })}
               {/if}
             </p>
           </svelte:fragment>
@@ -516,10 +507,10 @@
               on:click={handleSelectFromComputer}
               class="rounded-lg px-6 py-2 text-sm font-medium text-immich-primary transition-all hover:bg-immich-primary/10 dark:text-immich-dark-primary dark:hover:bg-immich-dark-primary/25"
             >
-              Select from computer
+              {$t('select_from_computer')}
             </button>
             <Button size="sm" rounded="lg" disabled={$timelineSelected.size === 0} on:click={handleAddAssets}
-              >Done</Button
+              >{$t('done')}</Button
             >
           </svelte:fragment>
         </ControlAppBar>
@@ -527,7 +518,7 @@
 
       {#if viewMode === ViewMode.SELECT_THUMBNAIL}
         <ControlAppBar on:close={() => (viewMode = ViewMode.VIEW)}>
-          <svelte:fragment slot="leading">Select Album Cover</svelte:fragment>
+          <svelte:fragment slot="leading">{$t('select_album_cover')}</svelte:fragment>
         </ControlAppBar>
       {/if}
     {/if}
@@ -559,7 +550,7 @@
             {#if viewMode !== ViewMode.SELECT_THUMBNAIL}
               <!-- ALBUM TITLE -->
               <section class="pt-24">
-                <AlbumTitle id={album.id} albumName={album.albumName} {isOwned} />
+                <AlbumTitle id={album.id} bind:albumName={album.albumName} {isOwned} />
 
                 {#if album.assetCount > 0}
                   <AlbumSummary {album} />
@@ -571,7 +562,7 @@
                     <!-- link -->
                     {#if album.hasSharedLink && isOwned}
                       <CircleIconButton
-                        title="Create link to share"
+                        title={$t('create_link_to_share')}
                         color="gray"
                         size="20"
                         icon={mdiLink}
@@ -594,7 +585,7 @@
                     <!-- display ellipsis if there are readonly users too -->
                     {#if albumHasViewers}
                       <CircleIconButton
-                        title="View all users"
+                        title={$t('view_all_users')}
                         color="gray"
                         size="20"
                         icon={mdiDotsVertical}
@@ -608,7 +599,7 @@
                         size="20"
                         icon={mdiPlus}
                         on:click={() => (viewMode = ViewMode.SELECT_USERS)}
-                        title="Add more users"
+                        title={$t('add_more_users')}
                       />
                     {/if}
                   </div>
@@ -621,7 +612,7 @@
             {#if album.assetCount === 0}
               <section id="empty-album" class=" mt-[200px] flex place-content-center place-items-center">
                 <div class="w-[300px]">
-                  <p class="text-xs dark:text-immich-dark-fg">ADD PHOTOS</p>
+                  <p class="text-xs dark:text-immich-dark-fg">{$t('add_photos').toUpperCase()}</p>
                   <button
                     type="button"
                     on:click={() => (viewMode = ViewMode.SELECT_ASSETS)}
@@ -630,7 +621,7 @@
                     <span class="text-text-immich-primary dark:text-immich-dark-primary"
                       ><Icon path={mdiPlus} size="24" />
                     </span>
-                    <span class="text-lg">Select photos</span>
+                    <span class="text-lg">{$t('select_photos')}</span>
                   </button>
                 </div>
               </section>
@@ -644,7 +635,6 @@
               disabled={!album.isActivityEnabled}
               {isLiked}
               numberOfComments={$numberOfComments}
-              {isShowActivity}
               on:favorite={handleFavorite}
               on:openActivityTab={handleOpenAndCloseActivityTab}
             />

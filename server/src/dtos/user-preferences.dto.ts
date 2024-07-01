@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, ValidateNested } from 'class-validator';
+import { IsEnum, IsInt, IsPositive, ValidateNested } from 'class-validator';
 import { UserAvatarColor, UserPreferences } from 'src/entities/user-metadata.entity';
 import { Optional, ValidateBoolean } from 'src/validation';
 
@@ -16,6 +16,25 @@ class MemoryUpdate {
   enabled?: boolean;
 }
 
+class EmailNotificationsUpdate {
+  @ValidateBoolean({ optional: true })
+  enabled?: boolean;
+
+  @ValidateBoolean({ optional: true })
+  albumInvite?: boolean;
+
+  @ValidateBoolean({ optional: true })
+  albumUpdate?: boolean;
+}
+
+class DownloadUpdate {
+  @Optional()
+  @IsInt()
+  @IsPositive()
+  @ApiProperty({ type: 'integer' })
+  archiveSize?: number;
+}
+
 export class UserPreferencesUpdateDto {
   @Optional()
   @ValidateNested()
@@ -26,6 +45,16 @@ export class UserPreferencesUpdateDto {
   @ValidateNested()
   @Type(() => MemoryUpdate)
   memories?: MemoryUpdate;
+
+  @Optional()
+  @ValidateNested()
+  @Type(() => EmailNotificationsUpdate)
+  emailNotifications?: EmailNotificationsUpdate;
+
+  @Optional()
+  @ValidateNested()
+  @Type(() => DownloadUpdate)
+  download?: DownloadUpdate;
 }
 
 class AvatarResponse {
@@ -37,9 +66,22 @@ class MemoryResponse {
   enabled!: boolean;
 }
 
+class EmailNotificationsResponse {
+  enabled!: boolean;
+  albumInvite!: boolean;
+  albumUpdate!: boolean;
+}
+
+class DownloadResponse {
+  @ApiProperty({ type: 'integer' })
+  archiveSize!: number;
+}
+
 export class UserPreferencesResponseDto implements UserPreferences {
   memories!: MemoryResponse;
   avatar!: AvatarResponse;
+  emailNotifications!: EmailNotificationsResponse;
+  download!: DownloadResponse;
 }
 
 export const mapPreferences = (preferences: UserPreferences): UserPreferencesResponseDto => {
